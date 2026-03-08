@@ -1,8 +1,11 @@
+# compare w SKLearn
 from sklearn.linear_model import LogisticRegression as SkLogistic
+from sklearn.linear_model import LogisticRegression as SkLogistic
+from sklearn.multiclass import OneVsRestClassifier
+import time
 
-sk_model = SkLogistic(
-    max_iter=500,
-    multi_class='ovr'
+sk_model = OneVsRestClassifier(
+    SkLogistic(max_iter=500)
 )
 
 start = time.time()
@@ -13,38 +16,5 @@ sk_time = end - start
 
 y_pred_sk = sk_model.predict(X_test)
 sk_accuracy = np.mean(y_pred_sk == y_test)
-
-best_result = max(results, key=lambda x: x['accuracy'])
-
-best_solver = best_result['solver']
-best_C = best_result['C']
-best_accuracy = best_result['accuracy']
-best_time = best_result['train_time']
-
-best_model = LogisticRegression(
-    solver=best_solver,
-    penalty='l2',
-    C=best_C,
-    max_iter=200
-)
-
-start = time.time()
-best_model.fit(X_train, y_train)
-end = time.time()
-
-custom_time = end - start
-
-models = ['Custom Logistic', 'Sklearn Logistic']
-accuracies = [best_accuracy, sk_accuracy]
-
-plt.bar(models, accuracies)
-plt.ylabel("Accuracy")
-plt.title("Accuracy Comparison: Custom vs Scikit-Learn Logistic Regression")
-plt.show()
-
-times = [custom_time, sk_time]
-
-plt.bar(models, times)
-plt.ylabel("Training Time (seconds)")
-plt.title("Training Time Comparison")
-plt.show()
+sk_accuracy_percentage = sk_accuracy*100
+print("Accuracy:", sk_accuracy_percentage, "%")
