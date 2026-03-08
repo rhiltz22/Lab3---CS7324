@@ -1,1 +1,35 @@
+# Preparation and Overview
+The task is to predict which BMW model a vehicle belongs to based on attributes such as engine size, fuel type, price, mileage, region, transmission type, and sales volume. Our model can be used by stakeholders such as BMW marketing teams, regional sales managers, automotive market analysts, and dealership inventory planners to predict which vehicle type fits certain market conditions and analyze sales patterns across regions. This model is primarily for offline analysis, not real-time deployment as it uses historical data to provide accurate insights. Our goal for this model is to achieve a high predictive accuracy (80-95%) given many classes, and we would expect an accuracy of this level in order to be considered by such large companies. Any mistakes could result in net profit loss by misleading stakeholders into over or undervalueing certain models.
 
+Attribute types and explanation:
+
+- Model: Name of the BMW vehicle model, measured as an object
+- Year: Manufacturing or sales year, measured as an integer
+- Region: Geographic market where the vehicle was sold, measured as an object
+- Color: Vehicle color, measured as an object
+- Fuel Type: Type of fuel used (Petrol, Diesel, Hybrid, etc.), measured as an object
+- Transmission: Transmission type (Manual or Automatic), measured as an object
+- Engine Size: Engine capacity in liters, measured as a floating point value
+- Mileage: Distance driven in kilometers, measured as an integer
+- Price: Vehicle price in US dollars, measured as an integer
+- Sales Volume: Number of units sold, measured as an integer
+- Sales Classification: A category label derived from sales volume and grouped into buckets (High, Low), measured as an object
+
+Post preprocessing: 
+
+Explain: number of samples, number of features after encoding, mean and std after scaling 
+(can be seen using this part of preprocessing file)
+# describe final dataset
+print(X_encoded.describe())
+print(X_encoded.shape))
+
+# justify 80/20 split
+something like: 
+
+80% training provides enough data for model learning.
+
+20% testing gives an unbiased estimate of performance.
+
+Dataset likely contains thousands of rows so the split is sufficient.
+
+# k-fold cross validation ? STILL NEED TO ADD
