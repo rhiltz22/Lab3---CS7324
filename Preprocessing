@@ -1,0 +1,39 @@
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+
+std_scale = StandardScaler()
+df = pd.read_csv("BMW sales data (2010-2024).csv")
+df.head()
+df.describe()
+print(df.info())
+print(df.dtypes)
+
+# group by model to see dataset information
+df_grouped = df.groupby(by='Model')
+for val,grp in df_grouped:
+    print(f'There are {len(grp)} {val} models.')
+
+# model is target variable so remove from features
+y = df['Model']
+X = df.drop(columns=['Model','Sales_Classification'])   # also remove Sales_Classification, can cause data leakage as derived from Sales_Volume.
+
+# identifty numerical and categorical data
+print(X.dtypes)
+
+# differentiate and encode using one-hot
+
+categorical_cols = X.select_dtypes(include=['object']).columns
+numeric_cols = X.select_dtypes(include=[np.number]).columns
+
+X_encoded = pd.get_dummies(X, columns=categorical_cols, drop_first=True)
+
+
+# scale numeric variables
+scaler = StandardScaler()
+
+X_encoded[numeric_cols] = scaler.fit_transform(X_encoded[numeric_cols])
+
+# change to numpy (models expects numpy arrays)
+X_final = X_encoded.values
+y_final = y.values
