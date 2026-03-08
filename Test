@@ -10,16 +10,63 @@ X_train, X_test, y_train, y_test = train_test_split(
     random_state=42
 )
 
-# train model
+solver_choice = input("Choose solver: steepest_ascent / stochastic / newton")
+
 model = LogisticRegression(
-    solver='newton',
+    solver=solver_choice,
     penalty='l2',
     max_iter=200
 )
 
+# evaluate accuracy of user choice
 model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 
-# evaluate accuracy
 accuracy = np.mean(y_pred == y_test)
-print("Accuracy:", accuracy)
+accuracy_percentage = accuracy * 100
+print("Accuracy:", accuracy_percentage, "%")
+
+
+# evaluating all models
+
+solvers = ['steepest_ascent', 'stochastic', 'newton']
+C_values = [1e-5, 1e-4, 1e-3, 1e-2]
+
+results = []
+
+for solver in solvers:
+    for C in C_values:
+
+        model = LogisticRegression(
+            solver=solver,
+            penalty='l2',
+            C=C,
+            max_iter=200
+        )
+
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+
+        accuracy = np.mean(y_pred == y_test)
+        accuracy_percentage = accuracy * 100
+
+        results.append((solver, C, accuracy_percentage))
+        print(f"Solver: {solver}, C: {C}, Accuracy: {accuracy_percentage}%")
+
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+
+# visualize performance
+
+import matplotlib.pyplot as plt
+
+for solver in solvers:
+    acc = [r[2] for r in results if r[0] == solver]
+    plt.plot(C_values, acc, marker='o', label=solver)
+
+plt.xscale('log')
+plt.xlabel("Regularization Strength (C)")
+plt.ylabel("Accuracy")
+plt.title("Logistic Regression Performance vs C")
+plt.legend()
+plt.show()
