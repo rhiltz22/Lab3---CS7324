@@ -1,0 +1,8 @@
+from sklearn.linear_model import LogisticRegression
+import time
+
+sk_model = LogisticRegression(max_iter=500, multi_class='ovr')
+
+start = time.time()
+model.fit(...) # work in progress.
+end = time.time()
