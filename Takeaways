@@ -1,0 +1,7 @@
+# Surprised to see the low accuracy (around 9%) across the different solvers but after searching for an explanation to why this is things become clear. 
+# Our target variable (BMW Models) are split into 11 categories, if there are 11 models, random guessing accuracy is: 1/11 around 9%. This means our model is probably predicting nearly randomly across many classes.
+# The explanation for the random prediction is our dataset has no real predictive relationship. We dug into this a little in lab 1 after using correlation heatmaps to determine how features interacted with one another.
+# The result was almost zero correlation between any of the features, proving that BMW models may not actually depend on the variables in the dataset.
+# Another explanation is that multiple models share similar specs, therefore the classifier cannot separate them. For example the 3 series and the 5 series models both have 2.0L size engine so predicting a certain model based on a metric like this is impossible.
+# A third thing to note is that our dataset is quite small. There are only 10 features and 50,000 units so logistic regression cannot estimate good weights.
+# At first we were afraid our model itself was wrong but after seeing a very similar accuracy using SKlearn's logistic regression implementation we can confirm that our model is not the issue, the data is just not very useful for what we were trying to predict.
