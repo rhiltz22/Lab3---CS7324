@@ -1,0 +1,251 @@
+import numpy as np
+from scipy.special import expit          # numerically stable sigmoid
+from scipy.optimize import fmin_bfgs
+from numpy import ma
+
+# internal helpers
+
+def _sigmoid(z):
+    # numerically stable sigmoid via scipy.
+    return expit(z)
+
+
+def _add_bias(X):
+    # prepend a column of ones (intercept term) to X.
+    return np.hstack((np.ones((X.shape[0], 1)), X))
+
+# binary logistic regression base 
+
+class _BinaryLogisticRegression:
+
+    # init
+    def __init__(self, solver='steepest_ascent', penalty='l2',
+                 C=1e-4, eta=0.1, max_iter=100,
+                 mini_batch_size=32, tol=1e-4, random_state=None):
+
+        _valid_solvers = {'steepest_ascent', 'stochastic', 'newton'}
+        _valid_penalties = {'none', 'l1', 'l2', 'elasticnet'}
+
+        if solver not in _valid_solvers:
+            raise ValueError(
+                f"solver must be one of {_valid_solvers}, got '{solver}'")
+        if penalty not in _valid_penalties:
+            raise ValueError(
+                f"penalty must be one of {_valid_penalties}, got '{penalty}'")
+        if C <= 0:
+            raise ValueError("C must be strictly positive.")
+
+        self.solver = solver
+        self.penalty = penalty
+        self.C = C
+        self.eta = eta
+        self.max_iter = max_iter
+        self.mini_batch_size = mini_batch_size
+        self.tol = tol
+        self.random_state = random_state
+
+        self.w_ = None          # set after fit()
+
+    # helpers
+
+    def _predict_proba_internal(self, Xb):
+        # return P(y=1 | Xb) using the current weight vector.
+
+        # parameters 
+        # Xb : ndarray of shape (n_samples, n_features + 1)
+        # design matrix with bias column already prepended.
+
+        # returns: ndarray of shape (n_samples,)
+        return _sigmoid(Xb @ self.w_).ravel()
+
+    def _reg_gradient(self, w_):
+        # return the regularization contribution to the gradient.
+
+        # The bias term (index 0) never regularized.
+
+        # gradient sign convention: maximize the log-likelihood, so regularization term is subtracted from the gradient:
+        # ∇l_reg(w) = ∇l(w) - reg_term
+
+        # for L2:  reg_term = 2 * C * w   (derivative of C * ||w||^2)
+        # for L1:  reg_term = C * sign(w) (subgradient of C * ||w||_1)
+        # for EN:  both combined.
+
+        # parameters: w_ : ndarray of shape (n_features + 1, 1)
+
+        # returns: ndarray of shape (n_features + 1, 1)  – reg penalty on gradient
+
+        reg = np.zeros_like(w_)
+        # skip the bias (index 0)
+        if self.penalty == 'l2':
+            reg[1:] = 2.0 * self.C * w_[1:]
+        elif self.penalty == 'l1':
+            reg[1:] = self.C * np.sign(w_[1:])
+        elif self.penalty == 'elasticnet':
+            reg[1:] = self.C * np.sign(w_[1:]) + 2.0 * self.C * w_[1:]
+        # 'none', reg stays zero
+        return reg
+
+    # gradient helper
+
+    def _get_gradient(self, Xb, y):
+        # vectorized gradient of the (mean) log-likelihood including regularization, evaluated at the current self.w_.
+
+        # ∇l(w) = mean_i[ (y^i − σ(x^i·w)) · x^i ] − reg_term(w)
+
+        # parameters: 
+        # Xb : ndarray (n_samples, n_features+1)
+        # y  : ndarray (n_samples,)
+
+        # returns: ndarray of shape (n_features + 1, 1)
+
+        ydiff = y - self._predict_proba_internal(Xb)          # (M,)
+        gradient = np.mean(Xb * ydiff[:, np.newaxis], axis=0) # (p+1,)
+        gradient = gradient.reshape(self.w_.shape)
+        gradient -= self._reg_gradient(self.w_)
+        return gradient
+
+    # solver: batch ascent
+
+    def _fit_steepest_ascent(self, Xb, y):
+        # batch gradient ascent with fixed step size eta.
+        for _ in range(self.max_iter):
+            grad = self._get_gradient(Xb, y)
+            self.w_ += self.eta * grad
+
+    # solver: stochastic ascent
+
+    def _fit_stochastic(self, Xb, y):
+        # mini-batch stochastic gradient ascent.
+        rng = np.random.default_rng(self.random_state)
+        batch = min(self.mini_batch_size, len(y))   # safety clamp
+        for _ in range(self.max_iter):
+            idxs = rng.choice(len(y), size=batch, replace=False)
+            grad = self._get_gradient(Xb[idxs], y[idxs])
+            self.w_ += self.eta * grad
+
+    # solver: Newton's (BFGS)
+
+    @staticmethod
+    def _bfgs_objective(w_flat, Xb, y, C, penalty):
+
+        # negative log-likelihood + regularization (scalar).
+        # scipy minimizes, so we negate the log-likelihood.
+
+        # l(w) = Σ[ y·log σ(Xb·w) + (1-y)·log(1-σ(Xb·w)) ] − reg(w)
+        # objective = −l(w)
+
+        g = _sigmoid(Xb @ w_flat)
+
+        # avoid log(0): mask by class label
+        nll = -ma.sum(ma.log(g[y == 1])) - ma.sum(ma.log(1.0 - g[y == 0]))
+
+        # regularization on non-bias weights (index 1 onward)
+        w_no_bias = w_flat[1:]
+        if penalty == 'l2':
+            reg = C * np.sum(w_no_bias ** 2)
+        elif penalty == 'l1':
+            reg = C * np.sum(np.abs(w_no_bias))
+        elif penalty == 'elasticnet':
+            reg = C * np.sum(np.abs(w_no_bias)) + C * np.sum(w_no_bias ** 2)
+        else:
+            reg = 0.0
+
+        return float(nll + reg)
+
+    @staticmethod
+    def _bfgs_gradient(w_flat, Xb, y, C, penalty):
+        # gradient of the negative log-likelihood + regularization (for BFGS).
+
+        # returns negative gradient because scipy minimizes.
+
+        g = _sigmoid(Xb @ w_flat)
+        ydiff = y - g
+        grad = np.mean(Xb * ydiff[:, np.newaxis], axis=0)  # (p+1,)
+        # subtract regularization penalty on non-bias weights
+        if penalty == 'l2':
+            grad[1:] -= 2.0 * C * w_flat[1:]
+        elif penalty == 'l1':
+            grad[1:] -= C * np.sign(w_flat[1:])
+        elif penalty == 'elasticnet':
+            grad[1:] -= C * np.sign(w_flat[1:]) + 2.0 * C * w_flat[1:]
+        return -grad   # negate: minimizing
+
+    def _fit_newton(self, Xb, y):
+        "Quasi-Newton BFGS via scipy.optimize.fmin_bfgs."
+        n_features = Xb.shape[1]
+        w0 = np.zeros(n_features)   # fmin_bfgs expects a 1-D array
+
+        w_opt = fmin_bfgs(
+            self._bfgs_objective,
+            w0,
+            fprime=self._bfgs_gradient,
+            args=(Xb, y, self.C, self.penalty),
+            gtol=self.tol,
+            maxiter=self.max_iter,
+            disp=False,
+        )
+        # reshape to column vector to match other solvers
+        self.w_ = w_opt.reshape(-1, 1)
+
+    # fit
+
+    def fit(self, X, y):
+
+        # parameters: 
+        # X : array-like of shape (n_samples, n_features)
+        # y : array-like of shape (n_samples,) – binary {0, 1}
+
+        # returns: self
+
+        Xb = _add_bias(np.asarray(X, dtype=float))
+        y = np.asarray(y, dtype=float).ravel()
+        n_features = Xb.shape[1]
+
+        self.w_ = np.zeros((n_features, 1))
+
+        if self.solver == 'steepest_ascent':
+            self._fit_steepest_ascent(Xb, y)
+        elif self.solver == 'stochastic':
+            self._fit_stochastic(Xb, y)
+        elif self.solver == 'newton':
+            self._fit_newton(Xb, y)
+
+        return self
+
+    # predict
+
+    def predict_proba(self, X):
+        # return probability estimates P(y=1 | X).
+
+        # parameters: X : array-like of shape (n_samples, n_features)
+
+        # returns: ndarray of shape (n_samples,)
+
+        Xb = _add_bias(np.asarray(X, dtype=float))
+        return self._predict_proba_internal(Xb)
+
+    def predict(self, X, threshold=0.5):
+        return (self.predict_proba(X) >= threshold).astype(int)
+
+    # sklearn-style extras
+
+    @property
+    def coef_(self):
+        "Weight vector excluding the intercept, shape (n_features,)."
+        if self.w_ is None:
+            return None
+        return self.w_[1:].ravel()
+
+    @property
+    def intercept_(self):
+        "Scalar bias weight."
+        if self.w_ is None:
+            return None
+        return float(self.w_[0])
+
+    def __repr__(self):
+        return (
+            f"_BinaryLogisticRegression("
+            f"solver='{self.solver}', penalty='{self.penalty}', "
+            f"C={self.C}, eta={self.eta}, max_iter={self.max_iter})"
+        )
