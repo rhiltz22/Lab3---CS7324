@@ -1,0 +1,95 @@
+# One vs One Multi-Class Extension
+from itertools import combinations
+
+class LogisticRegressionOvO:
+ 
+
+    def __init__(self, solver='newton', penalty='l2', C=1e-4,
+                 eta=0.1, max_iter=100, mini_batch_size=32,
+                 tol=1e-4, random_state=None):
+        self.solver          = solver
+        self.penalty         = penalty
+        self.C               = C
+        self.eta             = eta
+        self.max_iter        = max_iter
+        self.mini_batch_size = mini_batch_size
+        self.tol             = tol
+        self.random_state    = random_state
+
+    def fit(self, X, y):
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y)
+        self.classes_     = np.sort(np.unique(y))
+        self.pairs_       = list(combinations(self.classes_, 2))
+        self.classifiers_ = {}
+
+        for (cls_a, cls_b) in self.pairs_:
+            mask  = (y == cls_a) | (y == cls_b)
+            X_sub = X[mask]
+            y_sub = (y[mask] == cls_a).astype(int)   # cls_a -> 1, cls_b -> 0
+
+            clf = _BinaryLogisticRegression(
+                solver=self.solver, penalty=self.penalty, C=self.C,
+                eta=self.eta, max_iter=self.max_iter,
+                mini_batch_size=self.mini_batch_size,
+                tol=self.tol, random_state=self.random_state)
+            clf.fit(X_sub, y_sub)
+            self.classifiers_[(cls_a, cls_b)] = clf
+        return self
+
+    def predict(self, X):
+        X     = np.asarray(X, dtype=float)
+        votes = np.zeros((X.shape[0], len(self.classes_)), dtype=int)
+        cls_idx = {cls: i for i, cls in enumerate(self.classes_)}
+
+        for (cls_a, cls_b), clf in self.classifiers_.items():
+            p      = clf.predict_proba(X)
+            winner = np.where(p >= 0.5, cls_a, cls_b)
+            for i, w in enumerate(winner):
+                votes[i, cls_idx[w]] += 1
+
+        return self.classes_[np.argmax(votes, axis=1)]
+
+    def __repr__(self):
+        return (f"LogisticRegressionOvO(solver='{self.solver}', penalty='{self.penalty}', "
+                f"C={self.C}, max_iter={self.max_iter})")
+
+# Train and compare OvA vs OvO
+ovo_model = LogisticRegressionOvO(solver='newton', penalty='l2', C=best[1], max_iter=200)
+t0 = time.time()
+ovo_model.fit(X_train, y_train)
+ovo_time = time.time() - t0
+
+y_pred_ovo = ovo_model.predict(X_test)
+ovo_acc    = np.mean(y_pred_ovo == y_test) * 100
+
+print(f"OvA (best custom): accuracy={custom_acc:.2f}%  time={custom_time:.2f}s")
+print(f"OvO (custom)     : accuracy={ovo_acc:.2f}%     time={ovo_time:.2f}s")
+print(f"sklearn OvR      : accuracy={sk_accuracy:.2f}%  time={sk_time:.2f}s")
+
+# Bar Chart
+labels3 = [f'Custom OvA ({best[0]})', 'Custom OvO (newton)', 'sklearn OvR']
+accs3   = [custom_acc, ovo_acc, sk_accuracy]
+times3  = [custom_time, ovo_time, sk_time]
+colors  = ['darkorange', 'seagreen', 'steelblue']
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+axes[0].bar(labels3, accs3, color=colors, edgecolor='black')
+axes[0].set_ylabel("Test Accuracy (%)")
+axes[0].set_title("Accuracy: OvA vs OvO vs sklearn")
+axes[0].set_ylim(0, max(accs3) + 10)
+for i, v in enumerate(accs3):
+    axes[0].text(i, v + 0.3, f"{v:.2f}%", ha='center', fontsize=10)
+
+axes[1].bar(labels3, times3, color=colors, edgecolor='black')
+axes[1].set_ylabel("Training Time (s)")
+axes[1].set_title("Training Time: OvA vs OvO vs sklearn")
+for i, v in enumerate(times3):
+    axes[1].text(i, v + 0.3, f"{v:.1f}s", ha='center', fontsize=10)
+
+plt.tight_layout()
+plt.show()
+
+print("Classification Report (OvO):")
+print(classification_report(y_test, y_pred_ovo))
