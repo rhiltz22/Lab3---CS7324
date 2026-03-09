@@ -23,13 +23,7 @@ Explain: number of samples, number of features after encoding, mean and std afte
 print(X_encoded.describe())
 print(X_encoded.shape))
 
-# justify 80/20 split
-something like: 
-
-80% training provides enough data for model learning.
-
-20% testing gives an unbiased estimate of performance.
-
-Dataset likely contains thousands of rows so the split is sufficient.
+The 80/20 split works well on our dataset. 80% training provides enough data for model learning, and 20% testing gives an unbiased estimate of performance.
+Our dataset likely contains 50000 rows so the split is sufficient.
 
 # k-fold cross validation ? STILL NEED TO ADD
