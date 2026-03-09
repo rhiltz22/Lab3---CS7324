@@ -1,2 +1,2 @@
-# Which implementation of logistic regression would you advise be used in a deployed machine learning model, your implementation or scikit-learn (or other third party implementation)? Why?
-# Explaination: 
+# Although our model was quite well optimized the SKlearn implementation still edged it out by a little with about a 0.2% better accuracy than our best model, logistic regression using Newton's method.
+# They also provide better numerical stability and the model is more widely tested and well maintained.
